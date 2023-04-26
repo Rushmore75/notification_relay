@@ -2,7 +2,7 @@ use std::{str::FromStr, collections::HashMap};
 
 use crypto::{scrypt::{scrypt, ScryptParams}};
 use redis::Commands;
-use rocket::{request::{FromRequest, self, Outcome}, Request, tokio::sync::RwLock, http::Status};
+use rocket::{request::{FromRequest, self, Outcome}, Request, tokio::sync::RwLock, http::{Status, Cookie}};
 use serde::Serialize;
 
 use crate::{db::{Account, redis_connect}};
@@ -187,6 +187,7 @@ impl<'r> FromRequest<'r> for Session {
     /// session id.
     /// If the function is unsuccessful it will return an error.
     async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
+        // TODO when using redis it's not remembering who's logged in
 
         // Make get the keyring from rocket
         if let Some(keyring) = req.rocket().state::<crate::ManagedState>() {
@@ -215,8 +216,9 @@ impl<'r> FromRequest<'r> for Session {
                 if let Some(password) = req.headers().get_one(PASSWORD_HEADER_ID) {
                     if let Some(id) = keyring.write().await.login(email, password) {
                         println!("Authenticating via user/pass combo");
-                        // TODO add a way to tell the user to change from email / password method
-                        // to the session id method
+                        // add this new session to the their cookie jar
+                        req.cookies().add_private(Cookie::new(SESSION_COOKIE_ID, id.uuid.to_string()));
+
                         return Outcome::Success( id );
                     }
                 }
